@@ -544,6 +544,11 @@ C_ASSERT(sizeof(MMPFN) == 64);
 
 extern PMMPFN MmPfnDatabase;
 
+BOOLEAN
+NTAPI
+MmIsDumpPageTableFrame(
+    _In_ PFN_NUMBER Frame);
+
 PFN_NUMBER
 NTAPI
 MmBuildDumpPageBitmap(

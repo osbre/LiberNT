@@ -590,3 +590,14 @@ MiPtCheck(
 
     return Errors;
 }
+
+BOOLEAN
+MiPtIsTableFrame(
+    _In_ PMI_SYSTEM System,
+    _In_ ULONG64 Frame)
+{
+    if (Frame >= System->Pfn.FrameCount)
+        return FALSE;
+
+    return (MI_PFN_FLAGS(&System->Pfn.Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE) != 0;
+}

@@ -601,6 +601,14 @@ MmMapHibernationFrame(
     return MiArchDebugMapFrame(Frame);
 }
 
+BOOLEAN
+NTAPI
+MmIsDumpPageTableFrame(
+    _In_ PFN_NUMBER Frame)
+{
+    return MiPtIsTableFrame(&MiSystem, Frame);
+}
+
 PFN_NUMBER
 NTAPI
 MmBuildDumpPageBitmap(

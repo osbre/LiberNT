@@ -386,6 +386,40 @@ SysKernelStacks(void)
 
 static
 void
+SysDumpTableFrames(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    ULONG64 Base = 0, Size = PAGE_SIZE, Physical, Top;
+    ULONG TableFrame;
+
+    SysWorldCreate(&World, 1024, 1);
+    ProcessCreate(&World, &Space);
+
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 0x55)));
+    CHECK(MiPtTranslate(&Space, Base, &Physical, NULL));
+    CHECK(!MiPtIsTableFrame(&World.System, Physical >> PAGE_SHIFT));
+    CHECK(MiPtLookup(&Space, Base, &TableFrame) != NULL);
+    CHECK(MiPtIsTableFrame(&World.System, TableFrame));
+    CHECK(MiPtIsTableFrame(&World.System, Space.RootFrame));
+    CHECK(MiPtIsTableFrame(&World.System, World.System.SystemSpace.RootFrame));
+
+    CHECK(NT_SUCCESS(MiCreateKernelStack(&World.System, 2, 2, &Top)));
+    CHECK(NT_SUCCESS(KernelWrite64(&World, 0, Top - 8, 0x66)));
+    CHECK(MiPtTranslate(&World.System.SystemSpace, Top - 8, &Physical, NULL));
+    CHECK(!MiPtIsTableFrame(&World.System, Physical >> PAGE_SHIFT));
+    CHECK(MiPtLookup(&World.System.SystemSpace, Top - 8, &TableFrame) != NULL);
+    CHECK(MiPtIsTableFrame(&World.System, TableFrame));
+    CHECK(!MiPtIsTableFrame(&World.System, World.System.Pfn.FrameCount));
+    MiDeleteKernelStack(&World.System, Top, 2);
+
+    ProcessDestroy(&World, &Space);
+    SysWorldDestroy(&World, 1024);
+}
+
+static
+void
 SysIoAndContiguous(void)
 {
     static TEST_WORLD World;
@@ -1073,6 +1107,7 @@ TestSys(void)
     SysPtePopulationFailure();
     SysGraphicsMappingCapacity();
     SysKernelStacks();
+    SysDumpTableFrames();
     SysIoAndContiguous();
     SysMdl();
     SysMdlCacheAttributes();

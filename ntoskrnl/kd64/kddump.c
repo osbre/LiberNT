@@ -79,6 +79,8 @@ typedef struct _KDP_CRASH_DUMP_STATE
     BOOLEAN IncludeUserPages;
     RTL_BITMAP PageBitmap;
     PULONG PageBitmapBuffer;
+    RTL_BITMAP KeepBitmap;
+    PULONG KeepBitmapBuffer;
     PSUMMARY_DUMP64 Summary;
     ULONG SummarySize;
     PVOID CrashLogBuffer;
@@ -490,6 +492,8 @@ static VOID KdpCleanupCrashDumpCore(VOID)
         ExFreePoolWithTag(KdpCrashDumpState.Summary, TAG_CRASH_DUMP);
     if (KdpCrashDumpState.PageBitmapBuffer != NULL)
         ExFreePoolWithTag(KdpCrashDumpState.PageBitmapBuffer, TAG_CRASH_DUMP);
+    if (KdpCrashDumpState.KeepBitmapBuffer != NULL)
+        ExFreePoolWithTag(KdpCrashDumpState.KeepBitmapBuffer, TAG_CRASH_DUMP);
     if (KdpCrashDumpState.Header != NULL)
         ExFreePoolWithTag(KdpCrashDumpState.Header, TAG_CRASH_DUMP);
 
@@ -498,6 +502,8 @@ static VOID KdpCleanupCrashDumpCore(VOID)
     KdpCrashDumpState.IncludeUserPages = FALSE;
     RtlZeroMemory(&KdpCrashDumpState.PageBitmap, sizeof(KdpCrashDumpState.PageBitmap));
     KdpCrashDumpState.PageBitmapBuffer = NULL;
+    RtlZeroMemory(&KdpCrashDumpState.KeepBitmap, sizeof(KdpCrashDumpState.KeepBitmap));
+    KdpCrashDumpState.KeepBitmapBuffer = NULL;
     KdpCrashDumpState.Summary = NULL;
     KdpCrashDumpState.SummarySize = 0;
     KdpCrashDumpState.CrashLogBuffer = NULL;
@@ -561,6 +567,11 @@ static NTSTATUS KdpAllocateCrashDumpCoreResources(VOID)
         if (KdpCrashDumpState.PageBitmapBuffer == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
         RtlInitializeBitMap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.PageBitmapBuffer, BitmapBits);
+
+        KdpCrashDumpState.KeepBitmapBuffer = ExAllocatePoolWithTag(NonPagedPool, BitmapBytes, TAG_CRASH_DUMP);
+        if (KdpCrashDumpState.KeepBitmapBuffer == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlInitializeBitMap(&KdpCrashDumpState.KeepBitmap, KdpCrashDumpState.KeepBitmapBuffer, BitmapBits);
 
         KdpCrashDumpState.SummarySize = ALIGN_UP_BY(FIELD_OFFSET(SUMMARY_DUMP64, Buffer) + BitmapBytes, PAGE_SIZE);
         KdpCrashDumpState.Summary = ExAllocatePoolWithTag(NonPagedPool, KdpCrashDumpState.SummarySize, TAG_CRASH_DUMP);
@@ -1463,6 +1474,70 @@ static VOID KdpCaptureEarlyCrashDiagnostics(VOID)
     }
 }
 
+static VOID KdpKeepDumpRange(_In_ PVOID Base, _In_ SIZE_T Size)
+{
+    ULONG_PTR Page = (ULONG_PTR)PAGE_ALIGN(Base);
+    ULONG_PTR End = (ULONG_PTR)Base + Size;
+    ULONG64 Frame;
+
+    if (End < Page)
+        return;
+
+    for (; Page < End; Page += PAGE_SIZE)
+    {
+        if (!MmIsAddressValid((PVOID)Page))
+            continue;
+        Frame = (ULONG64)MmGetPhysicalAddress((PVOID)Page).QuadPart >> PAGE_SHIFT;
+        if (Frame < KdpCrashDumpState.KeepBitmap.SizeOfBitMap)
+            RtlSetBit(&KdpCrashDumpState.KeepBitmap, (ULONG)Frame);
+    }
+}
+
+static VOID KdpBuildDumpKeepBitmap(VOID)
+{
+    PLDR_DATA_TABLE_ENTRY Entry;
+    PLIST_ENTRY LastEntry = &PsLoadedModuleList;
+    PLIST_ENTRY NextEntry;
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    RtlClearAllBits(&KdpCrashDumpState.KeepBitmap);
+
+    while (MmIsAddressValid(LastEntry->Flink) && MmIsAddressValid(&LastEntry->Flink->Blink))
+    {
+        NextEntry = LastEntry->Flink;
+        if ((NextEntry == &PsLoadedModuleList) || (NextEntry->Blink != LastEntry))
+            break;
+        Entry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        if (!MmIsAddressValid(&Entry->SizeOfImage))
+            break;
+        KdpKeepDumpRange(Entry->DllBase, Entry->SizeOfImage);
+        LastEntry = NextEntry;
+    }
+
+    KdpKeepDumpRange((PVOID)SharedUserData, PAGE_SIZE);
+    if (Thread && MmIsAddressValid(Thread))
+        KdpKeepDumpRange((PVOID)Thread->StackLimit, (ULONG_PTR)Thread->InitialStack - (ULONG_PTR)Thread->StackLimit);
+}
+
+static ULONG64 KdpDropDumpPages(_In_ ULONG64 TotalPages, _In_ ULONG64 MaxPages, _In_ BOOLEAN KeepTables, _In_ BOOLEAN KeepListed)
+{
+    ULONG Bit;
+
+    for (Bit = KdpCrashDumpState.PageBitmap.SizeOfBitMap; (Bit-- > 0) && (TotalPages > MaxPages);)
+    {
+        if (!RtlCheckBit(&KdpCrashDumpState.PageBitmap, Bit))
+            continue;
+        if (KeepTables && MmIsDumpPageTableFrame(Bit))
+            continue;
+        if (KeepListed && RtlCheckBit(&KdpCrashDumpState.KeepBitmap, Bit))
+            continue;
+        RtlClearBit(&KdpCrashDumpState.PageBitmap, Bit);
+        TotalPages--;
+    }
+
+    return TotalPages;
+}
+
 NTSTATUS NTAPI KdpWriteCrashDump(VOID)
 {
     PHYSICAL_ADDRESS PhysicalAddress;
@@ -1516,23 +1591,18 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
     {
         PSUMMARY_DUMP64 Summary = KdpCrashDumpState.Summary;
         ULONG64 MaxPages;
-        ULONG Bit;
 
         TotalPages = MmBuildDumpPageBitmap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.IncludeUserPages);
         RequestedPages = TotalPages;
 
-        /* Drop the highest pages first if the dedicated target cannot take them all. */
+        /* Drop the highest pages first if the dedicated target cannot take them all, keeping loaded images, the bug check thread's stack and, last of all, page tables. */
         MaxPages = (KdpCrashDumpState.Capacity.QuadPart - DUMP_HEADER64_SIZE - KdpCrashDumpState.SummarySize) >> PAGE_SHIFT;
         if (TotalPages > MaxPages)
         {
-            for (Bit = KdpCrashDumpState.PageBitmap.SizeOfBitMap; (Bit-- > 0) && (TotalPages > MaxPages);)
-            {
-                if (RtlCheckBit(&KdpCrashDumpState.PageBitmap, Bit))
-                {
-                    RtlClearBit(&KdpCrashDumpState.PageBitmap, Bit);
-                    TotalPages--;
-                }
-            }
+            KdpBuildDumpKeepBitmap();
+            TotalPages = KdpDropDumpPages(TotalPages, MaxPages, TRUE, TRUE);
+            TotalPages = KdpDropDumpPages(TotalPages, MaxPages, TRUE, FALSE);
+            TotalPages = KdpDropDumpPages(TotalPages, MaxPages, FALSE, FALSE);
             KdpCrashDumpState.Header->Attributes.InsufficientDumpfileSize = TRUE;
         }
 
