@@ -368,6 +368,68 @@ static NTSTATUS KdpWriteStorageVirtual(_In_reads_bytes_(Length) PVOID Buffer, _I
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN KdpIsDumpFrame(_In_ PFN_NUMBER Frame)
+{
+    PDUMP_PHYSICAL_MEMORY_DESCRIPTOR64 Block = &KdpCrashDumpState.Header->PhysicalMemoryBlock;
+    ULONG RunIndex;
+
+    for (RunIndex = 0; RunIndex < Block->NumberOfRuns; RunIndex++)
+    {
+        if ((Frame >= Block->Run[RunIndex].BasePage) && (Frame - Block->Run[RunIndex].BasePage < Block->Run[RunIndex].PageCount))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static VOID NTAPI KdpAddCallbackPages(_In_ PVOID Context, _In_ PKBUGCHECK_ADD_PAGES AddPages)
+{
+    PULONG64 TotalPages = Context;
+    ULONG AddressFlags = AddPages->Flags & (KB_ADD_PAGES_FLAG_VIRTUAL_ADDRESS | KB_ADD_PAGES_FLAG_PHYSICAL_ADDRESS);
+    PFN_NUMBER Frame;
+    ULONG_PTR Index;
+    PVOID Page;
+
+    if ((AddressFlags != KB_ADD_PAGES_FLAG_VIRTUAL_ADDRESS) && (AddressFlags != KB_ADD_PAGES_FLAG_PHYSICAL_ADDRESS))
+        return;
+
+    for (Index = 0; Index < AddPages->Count; Index++)
+    {
+        if (AddressFlags == KB_ADD_PAGES_FLAG_VIRTUAL_ADDRESS)
+        {
+            Page = (PVOID)((AddPages->Address & ~(ULONG_PTR)(PAGE_SIZE - 1)) + (Index << PAGE_SHIFT));
+            if (!MmIsAddressValid(Page))
+                continue;
+            Frame = (PFN_NUMBER)(MmGetPhysicalAddress(Page).QuadPart >> PAGE_SHIFT);
+        }
+        else
+        {
+            Frame = (PFN_NUMBER)(AddPages->Address >> PAGE_SHIFT) + Index;
+            if (Frame >= KdpCrashDumpState.PageBitmap.SizeOfBitMap)
+                break;
+        }
+
+        if ((Frame >= KdpCrashDumpState.PageBitmap.SizeOfBitMap) || !KdpIsDumpFrame(Frame))
+            continue;
+        if (!RtlCheckBit(&KdpCrashDumpState.PageBitmap, Frame))
+        {
+            RtlSetBit(&KdpCrashDumpState.PageBitmap, Frame);
+            (*TotalPages)++;
+        }
+    }
+}
+
+static VOID KdpNotifyDumpIo(_In_ ULONG64 Offset, _In_opt_ PVOID Buffer, _In_ ULONG BufferLength, _In_ KBUGCHECK_DUMP_IO_TYPE Type)
+{
+    KBUGCHECK_DUMP_IO DumpIo;
+
+    DumpIo.Offset = Offset;
+    DumpIo.Buffer = Buffer;
+    DumpIo.BufferLength = BufferLength;
+    DumpIo.Type = Type;
+    KiInvokeBugCheckReasonCallbacks(KbCallbackDumpIo, &DumpIo, sizeof(DumpIo));
+}
+
 #if defined(_M_AMD64)
 static ULONG_PTR NTAPI KdpCaptureLiveDumpContext(_In_ ULONG_PTR Argument)
 {
@@ -1519,6 +1581,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
         ULONG Bit;
 
         TotalPages = MmBuildDumpPageBitmap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.IncludeUserPages);
+        KiInvokeBugCheckAddPagesCallbacks(KdpAddCallbackPages, &TotalPages);
         RequestedPages = TotalPages;
 
         /* Drop the highest pages first if the dedicated target cannot take them all. */
@@ -1583,12 +1646,14 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
     Status = KdpWriteStorageVirtual(KdpCrashDumpState.Header, DUMP_HEADER64_SIZE, &FileOffset);
     if (!NT_SUCCESS(Status))
         goto Exit;
+    KdpNotifyDumpIo(0, KdpCrashDumpState.Header, DUMP_HEADER64_SIZE, KbDumpIoHeader);
 
     if (KdpCrashDumpState.DumpType != DUMP_TYPE_FULL)
     {
         Status = KdpWriteStorageVirtual(KdpCrashDumpState.Summary, KdpCrashDumpState.SummarySize, &FileOffset);
         if (!NT_SUCCESS(Status))
             goto Exit;
+        KdpNotifyDumpIo(DUMP_HEADER64_SIZE, KdpCrashDumpState.Summary, KdpCrashDumpState.SummarySize, KbDumpIoHeader);
     }
 
     Status = KdpCrashDumpState.Storage.Flush(KdpCrashDumpState.Storage.Context);
@@ -1612,6 +1677,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
             Status = KdpWriteStoragePhysical(PhysicalAddress, PAGE_SIZE, &FileOffset);
             if (!NT_SUCCESS(Status))
                 goto Exit;
+            KdpNotifyDumpIo(FileOffset - PAGE_SIZE, MmMapHibernationFrame(Bit), PAGE_SIZE, KbDumpIoBody);
 
             PagesWritten++;
             while ((Step <= KDP_DUMP_DATA_PROGRESS_STEPS) && (PagesWritten >= ProgressPages[Step - 1]))
@@ -1635,6 +1701,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
             Status = KdpWriteStoragePhysical(PhysicalAddress, Length, &FileOffset);
             if (!NT_SUCCESS(Status))
                 goto Exit;
+            KdpNotifyDumpIo(FileOffset - Length, MmMapHibernationFrame((PFN_NUMBER)(PhysicalAddress.QuadPart >> PAGE_SHIFT)), Length, KbDumpIoBody);
 
             PhysicalAddress.QuadPart += Length;
             Remaining -= Length;
@@ -1689,6 +1756,8 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
     Status = KdpCrashDumpState.Storage.Flush(KdpCrashDumpState.Storage.Context);
     if (NT_SUCCESS(Status))
     {
+        KdpNotifyDumpIo(0, KdpCrashDumpState.Header, DUMP_HEADER64_SIZE, KbDumpIoHeader);
+        KdpNotifyDumpIo(0, NULL, 0, KbDumpIoComplete);
         if (!KdpCrashDumpState.Dedicated)
         {
             KdpDisplayCrashDumpProgress(100);

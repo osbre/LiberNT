@@ -572,6 +572,103 @@ KiDoBugCheckCallbacks(VOID)
     }
 }
 
+static
+BOOLEAN
+KiCallBugCheckReasonCallback(
+    _In_ PKBUGCHECK_REASON_CALLBACK_RECORD Record,
+    _Inout_ PVOID ReasonSpecificData,
+    _In_ ULONG ReasonSpecificDataLength)
+{
+    BOOLEAN Finished = FALSE;
+
+    Record->State = BufferStarted;
+    _SEH2_TRY
+    {
+        Record->CallbackRoutine(Record->Reason, Record, ReasonSpecificData, ReasonSpecificDataLength);
+        Record->State = BufferFinished;
+        Finished = TRUE;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Record->State = BufferIncomplete;
+    }
+    _SEH2_END;
+
+    return Finished;
+}
+
+static
+PKBUGCHECK_REASON_CALLBACK_RECORD
+KiNextBugCheckReasonCallback(
+    _Inout_ PLIST_ENTRY *Entry,
+    _In_ KBUGCHECK_CALLBACK_REASON Reason)
+{
+    PKBUGCHECK_REASON_CALLBACK_RECORD Record;
+    PLIST_ENTRY ListHead = &KeBugcheckReasonCallbackListHead;
+    PLIST_ENTRY LastEntry;
+
+    if (!ListHead->Flink || !ListHead->Blink)
+        return NULL;
+
+    LastEntry = *Entry ? *Entry : ListHead;
+    while (LastEntry->Flink != ListHead)
+    {
+        Record = CONTAINING_RECORD(LastEntry->Flink, KBUGCHECK_REASON_CALLBACK_RECORD, Entry);
+        if (Record->Entry.Blink != LastEntry)
+            return NULL;
+
+        LastEntry = &Record->Entry;
+        if ((Record->Reason == Reason) && (Record->State != BufferEmpty))
+        {
+            *Entry = LastEntry;
+            return Record;
+        }
+    }
+
+    return NULL;
+}
+
+VOID
+NTAPI
+KiInvokeBugCheckReasonCallbacks(
+    _In_ KBUGCHECK_CALLBACK_REASON Reason,
+    _Inout_ PVOID ReasonSpecificData,
+    _In_ ULONG ReasonSpecificDataLength)
+{
+    PKBUGCHECK_REASON_CALLBACK_RECORD Record;
+    PLIST_ENTRY Entry = NULL;
+
+    while ((Record = KiNextBugCheckReasonCallback(&Entry, Reason)) != NULL)
+        KiCallBugCheckReasonCallback(Record, ReasonSpecificData, ReasonSpecificDataLength);
+}
+
+VOID
+NTAPI
+KiInvokeBugCheckAddPagesCallbacks(
+    _In_ PKI_BUGCHECK_ADD_PAGES_ROUTINE AddPagesRoutine,
+    _In_ PVOID Context)
+{
+    PKBUGCHECK_REASON_CALLBACK_RECORD Record;
+    KBUGCHECK_ADD_PAGES AddPages;
+    PLIST_ENTRY Entry = NULL;
+
+    while ((Record = KiNextBugCheckReasonCallback(&Entry, KbCallbackAddPages)) != NULL)
+    {
+        AddPages.Context = NULL;
+        AddPages.BugCheckCode = (ULONG)KiBugCheckData[0];
+        do
+        {
+            AddPages.Flags = 0;
+            AddPages.Address = 0;
+            AddPages.Count = 0;
+            if (!KiCallBugCheckReasonCallback(Record, &AddPages, sizeof(AddPages)))
+                break;
+            if (AddPages.Count != 0)
+                AddPagesRoutine(Context, &AddPages);
+        } while (AddPages.Flags & KB_ADD_PAGES_FLAG_ADDITIONAL_RANGES_EXIST);
+    }
+}
+
 VOID
 NTAPI
 KiBugCheckDebugBreak(IN ULONG StatusCode)

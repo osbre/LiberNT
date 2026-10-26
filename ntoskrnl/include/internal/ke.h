@@ -1017,6 +1017,25 @@ VOID
 NTAPI
 KiInitializeBugCheck(VOID);
 
+typedef
+VOID
+(NTAPI *PKI_BUGCHECK_ADD_PAGES_ROUTINE)(
+    _In_ PVOID Context,
+    _In_ PKBUGCHECK_ADD_PAGES AddPages);
+
+VOID
+NTAPI
+KiInvokeBugCheckReasonCallbacks(
+    _In_ KBUGCHECK_CALLBACK_REASON Reason,
+    _Inout_ PVOID ReasonSpecificData,
+    _In_ ULONG ReasonSpecificDataLength);
+
+VOID
+NTAPI
+KiInvokeBugCheckAddPagesCallbacks(
+    _In_ PKI_BUGCHECK_ADD_PAGES_ROUTINE AddPagesRoutine,
+    _In_ PVOID Context);
+
 DECLSPEC_NORETURN
 CODE_SEG("INIT")
 VOID
