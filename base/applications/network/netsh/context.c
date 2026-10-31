@@ -810,6 +810,7 @@ BOOL
 CreateRootContext(VOID)
 {
     PCOMMAND_GROUP pGroup;
+    PCONTEXT_ENTRY pAdvFirewallContext, pFirewallContext;
 
     pRootContext = AddContext(NULL, L"netsh", NULL);
     DPRINT("pRootContext: %p\n", pRootContext);
@@ -860,6 +861,31 @@ CreateRootContext(VOID)
         AddGroupCommand(pGroup, L"alias",  ShowAliasCommand,  IDS_HLP_SHOW_ALIAS,  IDS_HLP_SHOW_ALIAS_EX, 0, NULL);
         AddGroupCommand(pGroup, L"helper", ShowHelperCommand, IDS_HLP_SHOW_HELPER, IDS_HLP_SHOW_HELPER_EX, 0, NULL);
         AddGroupCommand(pGroup, L"mode",   ShowModeCommand,   IDS_HLP_SHOW_MODE,   IDS_HLP_SHOW_MODE_EX, 0, NULL);
+    }
+
+    pAdvFirewallContext = AddContext(pRootContext, L"advfirewall", NULL);
+    if (pAdvFirewallContext)
+    {
+        pAdvFirewallContext->hModule = g_hModule;
+        pFirewallContext = AddContext(pAdvFirewallContext, L"firewall", NULL);
+        if (pFirewallContext)
+        {
+            PCOMMAND_GROUP pFirewallGroup;
+
+            pFirewallContext->hModule = g_hModule;
+            pFirewallGroup = AddCommandGroup(pFirewallContext, L"add", IDS_HLP_GROUP_ADD, 0, NULL);
+            if (pFirewallGroup)
+                AddGroupCommand(pFirewallGroup, L"rule", AdvFirewallAddRuleCommand,
+                                IDS_HLP_ADVFW_ADD_RULE, IDS_HLP_ADVFW_ADD_RULE_EX, 0, NULL);
+            pFirewallGroup = AddCommandGroup(pFirewallContext, L"delete", IDS_HLP_GROUP_DELETE, 0, NULL);
+            if (pFirewallGroup)
+                AddGroupCommand(pFirewallGroup, L"rule", AdvFirewallDeleteRuleCommand,
+                                IDS_HLP_ADVFW_DELETE_RULE, IDS_HLP_ADVFW_DELETE_RULE_EX, 0, NULL);
+            pFirewallGroup = AddCommandGroup(pFirewallContext, L"show", IDS_HLP_GROUP_SHOW, 0, NULL);
+            if (pFirewallGroup)
+                AddGroupCommand(pFirewallGroup, L"rule", AdvFirewallShowRuleCommand,
+                                IDS_HLP_ADVFW_SHOW_RULE, IDS_HLP_ADVFW_SHOW_RULE_EX, 0, NULL);
+        }
     }
 
     pCurrentContext = pRootContext;

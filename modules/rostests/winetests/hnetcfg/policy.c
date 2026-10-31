@@ -86,6 +86,116 @@ static void test_policy2_rules(INetFwPolicy2 *policy2)
     INetFwRules_Release(rules2);
 }
 
+static void test_firewall_rule_storage(INetFwPolicy2 *policy2)
+{
+    INetFwRules *rules;
+    INetFwRule *rule, *stored;
+    BSTR name = NULL, ports = NULL;
+    WCHAR name_buffer[64];
+    LONG count_before, count_after;
+    HRESULT hr;
+    BOOL added = FALSE;
+
+    hr = INetFwPolicy2_get_Rules(policy2, &rules);
+    ok(hr == S_OK, "get_Rules returned %#lx\n", hr);
+    if (FAILED(hr)) return;
+
+    hr = CoCreateInstance(&CLSID_NetFwRule, NULL, CLSCTX_INPROC_SERVER|CLSCTX_INPROC_HANDLER,
+                          &IID_INetFwRule, (void **)&rule);
+    ok(hr == S_OK, "NetFwRule create returned %#lx\n", hr);
+    if (FAILED(hr))
+    {
+        INetFwRules_Release(rules);
+        return;
+    }
+
+    swprintf(name_buffer, ARRAY_SIZE(name_buffer), L"LiberNT hnetcfg test %lu %lu",
+             GetCurrentProcessId(), GetTickCount());
+    name = SysAllocString(name_buffer);
+    ports = SysAllocString(L"49173,49180-49181");
+    ok(name != NULL && ports != NULL, "failed to allocate rule strings\n");
+    if (!name || !ports)
+        goto done;
+
+    hr = INetFwRule_put_Name(rule, name);
+    ok(hr == S_OK, "put_Name returned %#lx\n", hr);
+    hr = INetFwRule_put_Direction(rule, NET_FW_RULE_DIR_IN);
+    ok(hr == S_OK, "put_Direction returned %#lx\n", hr);
+    hr = INetFwRule_put_Action(rule, NET_FW_ACTION_BLOCK);
+    ok(hr == S_OK, "put_Action returned %#lx\n", hr);
+    hr = INetFwRule_put_Protocol(rule, 6);
+    ok(hr == S_OK, "put_Protocol returned %#lx\n", hr);
+    hr = INetFwRule_put_LocalPorts(rule, ports);
+    ok(hr == S_OK, "put_LocalPorts returned %#lx\n", hr);
+    hr = INetFwRule_put_Enabled(rule, VARIANT_FALSE);
+    ok(hr == S_OK, "put_Enabled returned %#lx\n", hr);
+    hr = INetFwRule_put_Profiles(rule, NET_FW_PROFILE2_ALL);
+    ok(hr == S_OK, "put_Profiles returned %#lx\n", hr);
+
+    hr = INetFwRules_get_Count(rules, &count_before);
+    ok(hr == S_OK, "get_Count returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    hr = INetFwRules_Add(rules, rule);
+    if (hr == E_ACCESSDENIED || hr == HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED))
+    {
+        win_skip("firewall policy write requires elevation\n");
+        goto done;
+    }
+    ok(hr == S_OK, "Add returned %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    added = TRUE;
+
+    hr = INetFwRules_get_Count(rules, &count_after);
+    ok(hr == S_OK, "get_Count returned %#lx\n", hr);
+    ok(count_after == count_before + 1, "count changed from %ld to %ld\n",
+       count_before, count_after);
+
+    hr = INetFwRules_Item(rules, name, &stored);
+    ok(hr == S_OK, "Item returned %#lx\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        BSTR stored_name = NULL, stored_ports = NULL;
+        LONG protocol;
+        NET_FW_RULE_DIRECTION direction;
+        NET_FW_ACTION action;
+
+        hr = INetFwRule_get_Name(stored, &stored_name);
+        ok(hr == S_OK, "get_Name returned %#lx\n", hr);
+        if (SUCCEEDED(hr))
+            ok(!lstrcmpW(stored_name, name), "got rule name %s\n", wine_dbgstr_w(stored_name));
+        SysFreeString(stored_name);
+        hr = INetFwRule_get_LocalPorts(stored, &stored_ports);
+        ok(hr == S_OK, "get_LocalPorts returned %#lx\n", hr);
+        if (SUCCEEDED(hr))
+            ok(!lstrcmpW(stored_ports, ports), "got ports %s\n", wine_dbgstr_w(stored_ports));
+        SysFreeString(stored_ports);
+        hr = INetFwRule_get_Protocol(stored, &protocol);
+        ok(hr == S_OK && protocol == 6, "got protocol %ld, hr %#lx\n", protocol, hr);
+        hr = INetFwRule_get_Direction(stored, &direction);
+        ok(hr == S_OK && direction == NET_FW_RULE_DIR_IN, "got direction %d, hr %#lx\n",
+           direction, hr);
+        hr = INetFwRule_get_Action(stored, &action);
+        ok(hr == S_OK && action == NET_FW_ACTION_BLOCK, "got action %d, hr %#lx\n", action, hr);
+        INetFwRule_Release(stored);
+    }
+
+    hr = INetFwRules_Remove(rules, name);
+    ok(hr == S_OK, "Remove returned %#lx\n", hr);
+    if (SUCCEEDED(hr)) added = FALSE;
+    hr = INetFwRules_get_Count(rules, &count_after);
+    ok(hr == S_OK, "get_Count returned %#lx\n", hr);
+    ok(count_after == count_before, "count changed from %ld to %ld after removal\n",
+       count_before, count_after);
+
+done:
+    if (added)
+        INetFwRules_Remove(rules, name);
+    SysFreeString(name);
+    SysFreeString(ports);
+    INetFwRule_Release(rule);
+    INetFwRules_Release(rules);
+}
+
 static void test_interfaces(void)
 {
     INetFwMgr *manager;
@@ -116,6 +226,7 @@ static void test_interfaces(void)
     if(hr == S_OK)
     {
         test_policy2_rules(policy2);
+        test_firewall_rule_storage(policy2);
 
         INetFwPolicy2_Release(policy2);
     }

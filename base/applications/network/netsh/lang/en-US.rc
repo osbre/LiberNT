@@ -78,6 +78,13 @@ BEGIN
     IDS_HLP_SHOW_MODE      "Shows the current mode.\n"
     IDS_HLP_SHOW_MODE_EX   "\nUsage: %1!s!\n\n        Shows the current mode (offline or online).\n"
 
+    IDS_HLP_ADVFW_ADD_RULE "Adds a firewall rule.\n"
+    IDS_HLP_ADVFW_ADD_RULE_EX "\nUsage: %1!s! name=<name> dir=in|out action=allow|block [protocol=TCP|UDP|any] [localport=any|<ports>] [remoteport=any|<ports>] [localip=any|<address>] [remoteip=any|<address>] [program=<path>] [profile=all|domain|private|public] [enable=yes|no]\n"
+    IDS_HLP_ADVFW_DELETE_RULE "Deletes a firewall rule by name.\n"
+    IDS_HLP_ADVFW_DELETE_RULE_EX "\nUsage: %1!s! name=<name>\n"
+    IDS_HLP_ADVFW_SHOW_RULE "Displays firewall rules.\n"
+    IDS_HLP_ADVFW_SHOW_RULE_EX "\nUsage: %1!s! [name=<name>|name=all]\n"
+
     IDS_HLP_GROUP_ADD      "Adds a configuration entry to a list of entries.\n"
     IDS_HLP_GROUP_DELETE   "Deletes a configuration entry from a list of entries.\n"
     IDS_HLP_GROUP_SET      "Updates configuration settings.\n"

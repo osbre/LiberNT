@@ -288,6 +288,39 @@ MergeStrings(
     _In_ LPWSTR pszStringArray[],
     _In_ UINT nCount);
 
+DWORD
+WINAPI
+AdvFirewallAddRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone);
+
+DWORD
+WINAPI
+AdvFirewallDeleteRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone);
+
+DWORD
+WINAPI
+AdvFirewallShowRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone);
+
 /* wmi.c */
 
 BOOL

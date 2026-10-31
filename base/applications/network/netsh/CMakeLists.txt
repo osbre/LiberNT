@@ -21,6 +21,6 @@ set_target_properties(netsh
     DEFINE_SYMBOL "")
 
 set_module_type(netsh win32cui UNICODE)
-target_link_libraries(netsh conutils)
+target_link_libraries(netsh conutils uuid)
 add_importlibs(netsh ole32 oleaut32 iphlpapi advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET netsh DESTINATION reactos/system32 FOR all)

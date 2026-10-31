@@ -9,6 +9,10 @@
 
 #include "precomp.h"
 
+#define COBJMACROS
+#include <objbase.h>
+#include <netfw.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -593,6 +597,511 @@ PreprocessCommand(
     }
 
     return 0;
+}
+
+typedef struct _FIREWALL_RULE_ARGUMENTS
+{
+    LPCWSTR Name;
+    LPCWSTR Direction;
+    LPCWSTR Action;
+    LPCWSTR Protocol;
+    LPCWSTR LocalPort;
+    LPCWSTR RemotePort;
+    LPCWSTR LocalAddress;
+    LPCWSTR RemoteAddress;
+    LPCWSTR Program;
+    LPCWSTR Description;
+    LPCWSTR Profile;
+    LPCWSTR Enabled;
+    DWORD Seen;
+} FIREWALL_RULE_ARGUMENTS;
+
+enum
+{
+    FW_ARG_NAME = 0x0001,
+    FW_ARG_DIRECTION = 0x0002,
+    FW_ARG_ACTION = 0x0004,
+    FW_ARG_PROTOCOL = 0x0008,
+    FW_ARG_LOCAL_PORT = 0x0010,
+    FW_ARG_REMOTE_PORT = 0x0020,
+    FW_ARG_LOCAL_ADDRESS = 0x0040,
+    FW_ARG_REMOTE_ADDRESS = 0x0080,
+    FW_ARG_PROGRAM = 0x0100,
+    FW_ARG_DESCRIPTION = 0x0200,
+    FW_ARG_PROFILE = 0x0400,
+    FW_ARG_ENABLED = 0x0800
+};
+
+static DWORD
+FirewallParseArguments(
+    _Inout_ FIREWALL_RULE_ARGUMENTS *Arguments,
+    _In_ LPWSTR *argv,
+    _In_ DWORD CurrentIndex,
+    _In_ DWORD ArgumentCount,
+    _In_ BOOL Show)
+{
+    DWORD Index;
+
+    ZeroMemory(Arguments, sizeof(*Arguments));
+    for (Index = CurrentIndex; Index < ArgumentCount; Index++)
+    {
+        LPWSTR equals = wcschr(argv[Index], L'=');
+        LPCWSTR key, value;
+        DWORD flag;
+        LPCWSTR *destination;
+
+        if (!equals || equals == argv[Index])
+            return ERROR_INVALID_SYNTAX;
+        *equals = 0;
+        key = argv[Index];
+        value = equals + 1;
+        if (!value[0])
+            return ERROR_INVALID_SYNTAX;
+
+        if (!_wcsicmp(key, L"name"))
+        {
+            flag = FW_ARG_NAME;
+            destination = &Arguments->Name;
+        }
+        else if (Show)
+            return ERROR_INVALID_SYNTAX;
+        else if (!_wcsicmp(key, L"dir"))
+        {
+            flag = FW_ARG_DIRECTION;
+            destination = &Arguments->Direction;
+        }
+        else if (!_wcsicmp(key, L"action"))
+        {
+            flag = FW_ARG_ACTION;
+            destination = &Arguments->Action;
+        }
+        else if (!_wcsicmp(key, L"protocol"))
+        {
+            flag = FW_ARG_PROTOCOL;
+            destination = &Arguments->Protocol;
+        }
+        else if (!_wcsicmp(key, L"localport"))
+        {
+            flag = FW_ARG_LOCAL_PORT;
+            destination = &Arguments->LocalPort;
+        }
+        else if (!_wcsicmp(key, L"remoteport"))
+        {
+            flag = FW_ARG_REMOTE_PORT;
+            destination = &Arguments->RemotePort;
+        }
+        else if (!_wcsicmp(key, L"localip"))
+        {
+            flag = FW_ARG_LOCAL_ADDRESS;
+            destination = &Arguments->LocalAddress;
+        }
+        else if (!_wcsicmp(key, L"remoteip"))
+        {
+            flag = FW_ARG_REMOTE_ADDRESS;
+            destination = &Arguments->RemoteAddress;
+        }
+        else if (!_wcsicmp(key, L"program"))
+        {
+            flag = FW_ARG_PROGRAM;
+            destination = &Arguments->Program;
+        }
+        else if (!_wcsicmp(key, L"description"))
+        {
+            flag = FW_ARG_DESCRIPTION;
+            destination = &Arguments->Description;
+        }
+        else if (!_wcsicmp(key, L"profile"))
+        {
+            flag = FW_ARG_PROFILE;
+            destination = &Arguments->Profile;
+        }
+        else if (!_wcsicmp(key, L"enable"))
+        {
+            flag = FW_ARG_ENABLED;
+            destination = &Arguments->Enabled;
+        }
+        else
+            return ERROR_INVALID_SYNTAX;
+
+        if (Arguments->Seen & flag)
+            return ERROR_INVALID_SYNTAX;
+        Arguments->Seen |= flag;
+        *destination = value;
+    }
+
+    if (!Arguments->Name && !Show)
+        return ERROR_INVALID_SYNTAX;
+    if (!Show && (!Arguments->Direction || !Arguments->Action))
+        return ERROR_INVALID_SYNTAX;
+    return ERROR_SUCCESS;
+}
+
+static DWORD
+FirewallHresultToError(HRESULT hr)
+{
+    if (SUCCEEDED(hr))
+        return ERROR_SUCCESS;
+    if (HRESULT_FACILITY(hr) == FACILITY_WIN32)
+        return HRESULT_CODE(hr);
+    return ERROR_GEN_FAILURE;
+}
+
+static HRESULT
+FirewallSetString(
+    _In_ INetFwRule *Rule,
+    _In_ HRESULT (WINAPI *Setter)(INetFwRule *, BSTR),
+    _In_ LPCWSTR Value)
+{
+    BSTR string = SysAllocString(Value);
+    HRESULT hr;
+
+    if (!string)
+        return E_OUTOFMEMORY;
+    hr = Setter(Rule, string);
+    SysFreeString(string);
+    return hr;
+}
+
+static HRESULT
+FirewallGetRules(
+    _Out_ INetFwPolicy2 **Policy,
+    _Out_ INetFwRules **Rules)
+{
+    HRESULT hr;
+
+    *Policy = NULL;
+    *Rules = NULL;
+    hr = CoCreateInstance(&CLSID_NetFwPolicy2, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_INetFwPolicy2, (void **)Policy);
+    if (SUCCEEDED(hr))
+        hr = INetFwPolicy2_get_Rules(*Policy, Rules);
+    if (FAILED(hr) && *Policy)
+    {
+        INetFwPolicy2_Release(*Policy);
+        *Policy = NULL;
+    }
+    return hr;
+}
+
+static HRESULT
+FirewallSetRule(
+    _In_ INetFwRule *Rule,
+    _In_ const FIREWALL_RULE_ARGUMENTS *Arguments)
+{
+    HRESULT hr;
+    LONG protocol = 256;
+    LONG profiles = NET_FW_PROFILE2_ALL;
+    VARIANT_BOOL enabled = VARIANT_TRUE;
+
+    if (!_wcsicmp(Arguments->Direction, L"in"))
+        hr = INetFwRule_put_Direction(Rule, NET_FW_RULE_DIR_IN);
+    else if (!_wcsicmp(Arguments->Direction, L"out"))
+        hr = INetFwRule_put_Direction(Rule, NET_FW_RULE_DIR_OUT);
+    else
+        return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+    if (FAILED(hr)) return hr;
+
+    if (!_wcsicmp(Arguments->Action, L"allow"))
+        hr = INetFwRule_put_Action(Rule, NET_FW_ACTION_ALLOW);
+    else if (!_wcsicmp(Arguments->Action, L"block"))
+        hr = INetFwRule_put_Action(Rule, NET_FW_ACTION_BLOCK);
+    else
+        return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+    if (FAILED(hr)) return hr;
+
+    if (Arguments->Protocol)
+    {
+        if (!_wcsicmp(Arguments->Protocol, L"tcp"))
+            protocol = 6;
+        else if (!_wcsicmp(Arguments->Protocol, L"udp"))
+            protocol = 17;
+        else if (!_wcsicmp(Arguments->Protocol, L"any"))
+            protocol = 256;
+        else
+        {
+            WCHAR *end;
+            unsigned long number = wcstoul(Arguments->Protocol, &end, 10);
+            if (*end || number > 256)
+                return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+            protocol = number;
+        }
+    }
+    hr = INetFwRule_put_Protocol(Rule, protocol);
+    if (FAILED(hr)) return hr;
+
+    if (Arguments->Profile)
+    {
+        WCHAR *profiles_text = _wcsdup(Arguments->Profile);
+        WCHAR *part, *start;
+
+        if (!profiles_text) return E_OUTOFMEMORY;
+        profiles = 0;
+        start = profiles_text;
+        do
+        {
+            part = wcschr(start, L',');
+            if (part)
+            {
+                if (!part[1])
+                {
+                    free(profiles_text);
+                    return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+                }
+                *part = 0;
+            }
+            if (!start[0])
+            {
+                free(profiles_text);
+                return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+            }
+            if (!_wcsicmp(start, L"all"))
+                profiles = NET_FW_PROFILE2_ALL;
+            else if (!_wcsicmp(start, L"domain"))
+                profiles |= NET_FW_PROFILE2_DOMAIN;
+            else if (!_wcsicmp(start, L"private"))
+                profiles |= NET_FW_PROFILE2_PRIVATE;
+            else if (!_wcsicmp(start, L"public"))
+                profiles |= NET_FW_PROFILE2_PUBLIC;
+            else
+            {
+                free(profiles_text);
+                return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+            }
+            if (!part) break;
+            start = part + 1;
+        } while (*start);
+        free(profiles_text);
+        if (!profiles)
+            return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+    }
+    hr = INetFwRule_put_Profiles(Rule, profiles);
+    if (FAILED(hr)) return hr;
+
+    if (Arguments->Enabled)
+    {
+        if (!_wcsicmp(Arguments->Enabled, L"yes") || !_wcsicmp(Arguments->Enabled, L"true"))
+            enabled = VARIANT_TRUE;
+        else if (!_wcsicmp(Arguments->Enabled, L"no") || !_wcsicmp(Arguments->Enabled, L"false"))
+            enabled = VARIANT_FALSE;
+        else
+            return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+    }
+    hr = INetFwRule_put_Enabled(Rule, enabled);
+    if (FAILED(hr)) return hr;
+
+    hr = FirewallSetString(Rule, Rule->lpVtbl->put_Name, Arguments->Name);
+    if (SUCCEEDED(hr) && Arguments->LocalPort)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_LocalPorts,
+                               !_wcsicmp(Arguments->LocalPort, L"any") ? L"*" : Arguments->LocalPort);
+    if (SUCCEEDED(hr) && Arguments->RemotePort)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_RemotePorts,
+                               !_wcsicmp(Arguments->RemotePort, L"any") ? L"*" : Arguments->RemotePort);
+    if (SUCCEEDED(hr) && Arguments->LocalAddress)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_LocalAddresses,
+                               !_wcsicmp(Arguments->LocalAddress, L"any") ? L"*" : Arguments->LocalAddress);
+    if (SUCCEEDED(hr) && Arguments->RemoteAddress)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_RemoteAddresses,
+                               !_wcsicmp(Arguments->RemoteAddress, L"any") ? L"*" : Arguments->RemoteAddress);
+    if (SUCCEEDED(hr) && Arguments->Program)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_ApplicationName, Arguments->Program);
+    if (SUCCEEDED(hr) && Arguments->Description)
+        hr = FirewallSetString(Rule, Rule->lpVtbl->put_Description, Arguments->Description);
+    return hr;
+}
+
+DWORD
+WINAPI
+AdvFirewallAddRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone)
+{
+    FIREWALL_RULE_ARGUMENTS arguments;
+    INetFwPolicy2 *policy = NULL;
+    INetFwRules *rules = NULL;
+    INetFwRule *rule = NULL;
+    HRESULT hr;
+    DWORD error;
+
+    UNREFERENCED_PARAMETER(dwFlags);
+    UNREFERENCED_PARAMETER(pvData);
+    UNREFERENCED_PARAMETER(pbDone);
+    if (pwszMachine) return ERROR_NOT_SUPPORTED;
+    error = FirewallParseArguments(&arguments, argv, dwCurrentIndex, dwArgCount, FALSE);
+    if (error != ERROR_SUCCESS) return error;
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) return FirewallHresultToError(hr);
+    hr = CoCreateInstance(&CLSID_NetFwRule, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_INetFwRule, (void **)&rule);
+    if (SUCCEEDED(hr))
+        hr = FirewallSetRule(rule, &arguments);
+    if (SUCCEEDED(hr))
+        hr = FirewallGetRules(&policy, &rules);
+    if (SUCCEEDED(hr))
+        hr = INetFwRules_Add(rules, rule);
+    error = FirewallHresultToError(hr);
+    if (rules) INetFwRules_Release(rules);
+    if (policy) INetFwPolicy2_Release(policy);
+    if (rule) INetFwRule_Release(rule);
+    CoUninitialize();
+    return error;
+}
+
+DWORD
+WINAPI
+AdvFirewallDeleteRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone)
+{
+    FIREWALL_RULE_ARGUMENTS arguments;
+    INetFwPolicy2 *policy = NULL;
+    INetFwRules *rules = NULL;
+    BSTR name = NULL;
+    HRESULT hr;
+    DWORD error;
+
+    UNREFERENCED_PARAMETER(dwFlags);
+    UNREFERENCED_PARAMETER(pvData);
+    UNREFERENCED_PARAMETER(pbDone);
+    if (pwszMachine) return ERROR_NOT_SUPPORTED;
+    error = FirewallParseArguments(&arguments, argv, dwCurrentIndex, dwArgCount, TRUE);
+    if (error != ERROR_SUCCESS) return error;
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) return FirewallHresultToError(hr);
+    hr = FirewallGetRules(&policy, &rules);
+    if (SUCCEEDED(hr))
+    {
+        name = SysAllocString(arguments.Name);
+        hr = name ? INetFwRules_Remove(rules, name) : E_OUTOFMEMORY;
+    }
+    error = FirewallHresultToError(hr);
+    SysFreeString(name);
+    if (rules) INetFwRules_Release(rules);
+    if (policy) INetFwPolicy2_Release(policy);
+    CoUninitialize();
+    return error;
+}
+
+static DWORD
+FirewallPrintRule(INetFwRule *rule)
+{
+    BSTR name = NULL;
+    NET_FW_RULE_DIRECTION direction;
+    NET_FW_ACTION action;
+    LONG protocol;
+    VARIANT_BOOL enabled;
+    HRESULT hr;
+
+    hr = INetFwRule_get_Name(rule, &name);
+    if (SUCCEEDED(hr)) hr = INetFwRule_get_Direction(rule, &direction);
+    if (SUCCEEDED(hr)) hr = INetFwRule_get_Action(rule, &action);
+    if (SUCCEEDED(hr)) hr = INetFwRule_get_Protocol(rule, &protocol);
+    if (SUCCEEDED(hr)) hr = INetFwRule_get_Enabled(rule, &enabled);
+    if (SUCCEEDED(hr))
+        ConPrintf(StdOut, L"%s: %s, %s, protocol %ld, %s\n", name,
+                  direction == NET_FW_RULE_DIR_IN ? L"inbound" : L"outbound",
+                  action == NET_FW_ACTION_ALLOW ? L"allow" : L"block", protocol,
+                  enabled == VARIANT_TRUE ? L"enabled" : L"disabled");
+    SysFreeString(name);
+    return FirewallHresultToError(hr);
+}
+
+DWORD
+WINAPI
+AdvFirewallShowRuleCommand(
+    LPCWSTR pwszMachine,
+    LPWSTR *argv,
+    DWORD dwCurrentIndex,
+    DWORD dwArgCount,
+    DWORD dwFlags,
+    LPCVOID pvData,
+    BOOL *pbDone)
+{
+    FIREWALL_RULE_ARGUMENTS arguments;
+    INetFwPolicy2 *policy = NULL;
+    INetFwRules *rules = NULL;
+    HRESULT hr;
+    DWORD error;
+    BOOL initialized = FALSE;
+
+    UNREFERENCED_PARAMETER(dwFlags);
+    UNREFERENCED_PARAMETER(pvData);
+    UNREFERENCED_PARAMETER(pbDone);
+    if (pwszMachine) return ERROR_NOT_SUPPORTED;
+    error = FirewallParseArguments(&arguments, argv, dwCurrentIndex, dwArgCount, TRUE);
+    if (error != ERROR_SUCCESS) return error;
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) return FirewallHresultToError(hr);
+    initialized = TRUE;
+    hr = FirewallGetRules(&policy, &rules);
+    if (SUCCEEDED(hr) && arguments.Name && _wcsicmp(arguments.Name, L"all"))
+    {
+        INetFwRule *rule;
+        BSTR name = SysAllocString(arguments.Name);
+
+        if (!name)
+            hr = E_OUTOFMEMORY;
+        else
+            hr = INetFwRules_Item(rules, name, &rule);
+        SysFreeString(name);
+        if (SUCCEEDED(hr))
+        {
+            error = FirewallPrintRule(rule);
+            INetFwRule_Release(rule);
+            hr = error ? HRESULT_FROM_WIN32(error) : S_OK;
+        }
+    }
+    else if (SUCCEEDED(hr))
+    {
+        IUnknown *enumerator = NULL;
+        IEnumVARIANT *enumvar = NULL;
+
+        hr = INetFwRules_get__NewEnum(rules, &enumerator);
+        if (SUCCEEDED(hr))
+            hr = IUnknown_QueryInterface(enumerator, &IID_IEnumVARIANT, (void **)&enumvar);
+        if (enumerator) IUnknown_Release(enumerator);
+        while (SUCCEEDED(hr) && enumvar)
+        {
+            VARIANT value;
+            ULONG fetched = 0;
+
+            VariantInit(&value);
+            hr = IEnumVARIANT_Next(enumvar, 1, &value, &fetched);
+            if (hr == S_FALSE)
+                break;
+            if (SUCCEEDED(hr) && fetched == 1 && V_VT(&value) == VT_DISPATCH)
+            {
+                INetFwRule *rule;
+
+                hr = IDispatch_QueryInterface(V_DISPATCH(&value), &IID_INetFwRule,
+                                              (void **)&rule);
+                if (SUCCEEDED(hr))
+                {
+                    error = FirewallPrintRule(rule);
+                    INetFwRule_Release(rule);
+                    if (error) hr = HRESULT_FROM_WIN32(error);
+                }
+            }
+            else if (SUCCEEDED(hr))
+                hr = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            VariantClear(&value);
+        }
+        if (enumvar) IEnumVARIANT_Release(enumvar);
+    }
+    error = FirewallHresultToError(hr);
+    if (rules) INetFwRules_Release(rules);
+    if (policy) INetFwPolicy2_Release(policy);
+    if (initialized) CoUninitialize();
+    return error;
 }
 
 DWORD
