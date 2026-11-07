@@ -27,6 +27,7 @@ KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoReadWrite;
 KMT_TESTFUNC Test_MmMapLockedPagesSpecifyCache;
 KMT_TESTFUNC Test_NtCreateSection;
+KMT_TESTFUNC Test_KdStartOptions;
 KMT_TESTFUNC Test_NtSystemDebugControl;
 KMT_TESTFUNC Test_NtUserPhysicalPages;
 KMT_TESTFUNC Test_NtProcessClone;
@@ -82,6 +83,7 @@ const KMT_TEST TestList[] =
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
     { "NdisSgDma",                    Test_NdisSgDma },
+    { "KdStartOptions",               Test_KdStartOptions },
     { "NtSystemDebugControl",         Test_NtSystemDebugControl },
     { "NtUserPhysicalPages",          Test_NtUserPhysicalPages },
     { "NtProcessClone",               Test_NtProcessClone },

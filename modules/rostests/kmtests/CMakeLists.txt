@@ -532,6 +532,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoReadWrite_user.c
+    ntos_kd/KdStartOptions.c
     ntos_kd/NtSystemDebugControl.c
     ntos_mm/MmMapLockedPagesSpecifyCache_user.c
     ntos_mm/NtCreateSection_user.c
