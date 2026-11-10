@@ -581,7 +581,7 @@ USBPORT_CancelActiveTransferIrp(IN PDEVICE_OBJECT DeviceObject,
 
     KeAcquireSpinLockAtDpcLevel(&Endpoint->EndpointSpinLock);
 
-    Transfer->Flags |= TRANSFER_FLAG_CANCELED;
+    InterlockedOr((volatile LONG *)&Transfer->Flags, TRANSFER_FLAG_CANCELED);
     CompleteNonSubmitted = FALSE;
 
     if (Transfer->Flags & TRANSFER_FLAG_PARENT)
@@ -596,7 +596,7 @@ USBPORT_CancelActiveTransferIrp(IN PDEVICE_OBJECT DeviceObject,
                                               USBPORT_TRANSFER,
                                               SplitLink);
 
-            SplitTransfer->Flags |= TRANSFER_FLAG_CANCELED;
+            InterlockedOr((volatile LONG *)&SplitTransfer->Flags, TRANSFER_FLAG_CANCELED);
 
             Entry = Entry->Flink;
         }
@@ -1358,7 +1358,7 @@ USBPORT_KillEndpointActiveTransfers(IN PDEVICE_OBJECT FdoDevice,
         }
 
         ++KilledTransfers;
-        Transfer->Flags |= TRANSFER_FLAG_ABORTED;
+        InterlockedOr((volatile LONG *)&Transfer->Flags, TRANSFER_FLAG_ABORTED);
 
         ActiveList = Transfer->TransferLink.Flink;
     }
@@ -1495,7 +1495,7 @@ USBPORT_AbortEndpoint(IN PDEVICE_OBJECT FdoDevice,
         DPRINT_CORE("USBPORT_AbortEndpoint: Abort PendingTransfer - %p\n",
                     PendingTransfer);
 
-        PendingTransfer->Flags |= TRANSFER_FLAG_ABORTED;
+        InterlockedOr((volatile LONG *)&PendingTransfer->Flags, TRANSFER_FLAG_ABORTED);
 
         PendingList = PendingTransfer->TransferLink.Flink;
     }
@@ -1520,11 +1520,11 @@ USBPORT_AbortEndpoint(IN PDEVICE_OBJECT FdoDevice,
         DPRINT_CORE("USBPORT_AbortEndpoint: Abort ActiveTransfer - %p\n",
                     ActiveTransfer);
 
-        ActiveTransfer->Flags |= TRANSFER_FLAG_ABORTED;
+        InterlockedOr((volatile LONG *)&ActiveTransfer->Flags, TRANSFER_FLAG_ABORTED);
 
         if (Endpoint->Flags & ENDPOINT_FLAG_ABORTING)
         {
-            ActiveTransfer->Flags |= TRANSFER_FLAG_DEVICE_GONE;
+            InterlockedOr((volatile LONG *)&ActiveTransfer->Flags, TRANSFER_FLAG_DEVICE_GONE);
         }
 
         ActiveList = ActiveTransfer->TransferLink.Flink;

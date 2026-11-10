@@ -4175,8 +4175,8 @@ SkipDmaCleanup:
             InterlockedExchange(&Endpoint->ReusableTransferInFlight, 0);
 
             /* Mark as reusable and cache */
-            Transfer->Flags |= TRANSFER_FLAG_REUSABLE;
-            Transfer->Flags &= ~TRANSFER_FLAG_COMPLETED;
+            InterlockedOr((volatile LONG *)&Transfer->Flags, TRANSFER_FLAG_REUSABLE);
+            InterlockedAnd((volatile LONG *)&Transfer->Flags, ~TRANSFER_FLAG_COMPLETED);
 
             /* Clear per-request fields to avoid stale references */
             Transfer->Irp = NULL;

@@ -2304,7 +2304,7 @@ USBPORT_DmaEndpointActive(IN PDEVICE_OBJECT FdoDevice,
                 return USBPORT_ENDPOINT_ACTIVE;
             }
 
-            Transfer->Flags |= TRANSFER_FLAG_SUBMITED;
+            InterlockedOr((volatile LONG *)&Transfer->Flags, TRANSFER_FLAG_SUBMITED);
             if (Pipelined)
                 InFlight = TRUE;
 
