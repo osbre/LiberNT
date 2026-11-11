@@ -21,6 +21,7 @@ PACL SePublicOpenDacl = NULL;
 PACL SePublicOpenUnrestrictedDacl = NULL;
 PACL SeUnrestrictedDacl = NULL;
 PACL SeSystemAnonymousLogonDacl = NULL;
+PACL SeLowMandatoryLabelSacl = NULL;
 
 /* FUNCTIONS ******************************************************************/
 
@@ -175,6 +176,27 @@ SepInitDACLs(VOID)
                            ACL_REVISION,
                            GENERIC_READ | GENERIC_EXECUTE,
                            SeRestrictedCodeSid);
+
+    AclLength = sizeof(ACL) +
+                FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + RtlLengthSid(SeLowMandatorySid);
+
+    SeLowMandatoryLabelSacl = ExAllocatePoolWithTag(PagedPool,
+                                                    AclLength,
+                                                    TAG_ACL);
+    if (SeLowMandatoryLabelSacl == NULL)
+        return FALSE;
+
+    RtlCreateAcl(SeLowMandatoryLabelSacl,
+                 AclLength,
+                 ACL_REVISION);
+
+    RtlAddMandatoryAce(SeLowMandatoryLabelSacl,
+                       ACL_REVISION,
+                       0,
+                       SYSTEM_MANDATORY_LABEL_NO_WRITE_UP,
+                       SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+                       SeLowMandatorySid);
+    ASSERT(SeLowMandatoryLabelSacl->AceCount == 1);
 
     /* create SystemDefaultDacl */
     AclLength = sizeof(ACL) +

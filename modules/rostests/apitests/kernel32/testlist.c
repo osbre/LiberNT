@@ -78,6 +78,7 @@ extern void func_lstrlen(void);
 extern void func_MailslotRead(void);
 extern void func_MuiResources(void);
 extern void func_MultiByteToWideChar(void);
+extern void func_NullDeviceToken(void);
 extern void func_NumaApis(void);
 extern void func_Pipes(void);
 extern void func_PackageNames(void);
@@ -199,6 +200,7 @@ const struct test winetest_testlist[] =
     { "MailslotRead",                func_MailslotRead },
     { "MuiResources",                func_MuiResources },
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
+    { "NullDeviceToken",             func_NullDeviceToken },
     { "NumaApis",                    func_NumaApis },
     { "Pipes",                       func_Pipes },
     { "PackageNames",                func_PackageNames },

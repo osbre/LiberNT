@@ -878,6 +878,13 @@ IopCreateSecurityDescriptorPerType(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     /* We've set DACL */
     if (OutputFlags) *OutputFlags |= DACL_SET;
 
+    if (NT_SUCCESS(Status) && Type == UnrestrictedPublicOpen)
+    {
+        ASSERT(SeLowMandatoryLabelSacl != NULL);
+        Status = RtlSetSaclSecurityDescriptor(SecurityDescriptor, TRUE, SeLowMandatoryLabelSacl, FALSE);
+        ASSERT(NT_SUCCESS(Status));
+    }
+
     /* Done */
     return Status;
 }

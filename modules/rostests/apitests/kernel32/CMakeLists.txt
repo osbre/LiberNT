@@ -82,6 +82,7 @@ list(APPEND SOURCE
     Mailslot.c
     MuiResources.c
     MultiByteToWideChar.c
+    NullDeviceToken.c
     NumaApis.c
     Pipes.c
     PackageNames.c

@@ -278,6 +278,7 @@ extern PACL SePublicOpenDacl;
 extern PACL SePublicOpenUnrestrictedDacl;
 extern PACL SeUnrestrictedDacl;
 extern PACL SeSystemAnonymousLogonDacl;
+extern PACL SeLowMandatoryLabelSacl;
 
 //
 // SDs
