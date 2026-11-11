@@ -965,14 +965,17 @@ SetSystemFileCacheSize(IN SIZE_T MinimumFileCacheSize,
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 LONG
 WINAPI
 GetCurrentPackageId(UINT32 *BufferLength,
                     BYTE *Buffer)
 {
-    STUB;
+    if (!BufferLength || (*BufferLength && !Buffer))
+        return ERROR_INVALID_PARAMETER;
+
+    /* TODO: report the package identity once processes can have one */
     return APPMODEL_ERROR_NO_PACKAGE;
 }
 

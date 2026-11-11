@@ -41,6 +41,7 @@ extern void func_GetLocaleInfo(void);
 extern void func_GetModuleFileName(void);
 extern void func_GetNumaNodeProcessorMaskEx(void);
 extern void func_GetOsSafeBootMode(void);
+extern void func_GetCurrentPackageId(void);
 extern void func_GetPackageFamilyName(void);
 extern void func_GetProcessorSystemCycleTime(void);
 extern void func_AppModelInternal(void);
@@ -161,6 +162,7 @@ const struct test winetest_testlist[] =
     { "GetModuleFileName",           func_GetModuleFileName },
     { "GetNumaNodeProcessorMaskEx",  func_GetNumaNodeProcessorMaskEx },
     { "GetOsSafeBootMode",           func_GetOsSafeBootMode },
+    { "GetCurrentPackageId",         func_GetCurrentPackageId },
     { "GetPackageFamilyName",        func_GetPackageFamilyName },
     { "GetProcessorSystemCycleTime", func_GetProcessorSystemCycleTime },
     { "AppModelInternal",            func_AppModelInternal },

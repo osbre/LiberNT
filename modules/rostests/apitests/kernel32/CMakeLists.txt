@@ -43,6 +43,7 @@ list(APPEND SOURCE
     GetModuleFileName.c
     GetNumaNodeProcessorMaskEx.c
     GetOsSafeBootMode.c
+    GetCurrentPackageId.c
     GetPackageFamilyName.c
     GetProcessorSystemCycleTime.c
     AppModelInternal.c
