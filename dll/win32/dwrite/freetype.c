@@ -672,6 +672,14 @@ static void translate_glyph(FT_Glyph glyph, float offset_x, float offset_y)
             (FT_Pos)(offset_x * 64.0f + 0.5f), -(FT_Pos)(offset_y * 64.0f + 0.5f));
 }
 
+static void oversample_glyph(FT_Glyph glyph, unsigned int oversample)
+{
+    FT_Matrix m = { (FT_Fixed)oversample << 16, 0, 0, 1 << 16 };
+
+    if (glyph->format == FT_GLYPH_FORMAT_OUTLINE && oversample > 1)
+        pFT_Outline_Transform(&((FT_OutlineGlyph)glyph)->outline, &m);
+}
+
 static NTSTATUS get_glyph_bbox(void *args)
 {
     struct get_glyph_bbox_params *params = args;
@@ -689,7 +697,8 @@ static NTSTATUS get_glyph_bbox(void *args)
 
     needs_transform = FT_IS_SCALABLE(face) && get_glyph_transform(params->simulations, &params->m, &m);
 
-    if (pFT_Load_Glyph(face, params->glyph, get_glyph_load_flags(params->gridfit, needs_transform)))
+    if (pFT_Load_Glyph(face, params->glyph, get_glyph_load_flags(params->gridfit && !params->oversample,
+            needs_transform || params->oversample)))
     {
         WARN("Failed to load glyph %u.\n", params->glyph);
         pFT_Done_Size(size);
@@ -707,6 +716,7 @@ static NTSTATUS get_glyph_bbox(void *args)
     }
 
     translate_glyph(glyph, params->offset_x, params->offset_y);
+    oversample_glyph(glyph, params->oversample);
     pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &bbox);
     pFT_Done_Glyph(glyph);
     pFT_Done_Size(size);
@@ -831,7 +841,8 @@ static NTSTATUS get_glyph_bitmap(void *args)
 
     needs_transform = FT_IS_SCALABLE(face) && get_glyph_transform(params->simulations, &params->m, &m);
 
-    if (!pFT_Load_Glyph(face, params->glyph, get_glyph_load_flags(params->gridfit, needs_transform)))
+    if (!pFT_Load_Glyph(face, params->glyph, get_glyph_load_flags(params->gridfit && !params->oversample,
+            needs_transform || params->oversample)))
     {
         pFT_Get_Glyph(face->glyph, &glyph);
 
@@ -845,6 +856,7 @@ static NTSTATUS get_glyph_bitmap(void *args)
         }
 
         translate_glyph(glyph, params->offset_x, params->offset_y);
+        oversample_glyph(glyph, params->oversample);
 
         if (params->mode == DWRITE_RENDERING_MODE1_ALIASED)
             ret = freetype_get_aliased_glyph_bitmap(params, glyph);
@@ -1131,6 +1143,7 @@ static NTSTATUS wow64_get_glyph_bbox(void *args)
         ULONG simulations;
         ULONG glyph;
         ULONG gridfit;
+        ULONG oversample;
         float emsize;
         float offset_x;
         float offset_y;
@@ -1143,6 +1156,7 @@ static NTSTATUS wow64_get_glyph_bbox(void *args)
         params32->simulations,
         params32->glyph,
         params32->gridfit,
+        params32->oversample,
         params32->emsize,
         params32->offset_x,
         params32->offset_y,
@@ -1162,6 +1176,7 @@ static NTSTATUS wow64_get_glyph_bitmap(void *args)
         ULONG glyph;
         ULONG mode;
         ULONG gridfit;
+        ULONG oversample;
         float emsize;
         float offset_x;
         float offset_y;
@@ -1178,6 +1193,7 @@ static NTSTATUS wow64_get_glyph_bitmap(void *args)
         params32->glyph,
         params32->mode,
         params32->gridfit,
+        params32->oversample,
         params32->emsize,
         params32->offset_x,
         params32->offset_y,

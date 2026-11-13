@@ -589,6 +589,7 @@ struct dwrite_glyphbitmap
     float emsize;
     UINT16 glyph;
     unsigned int gridfit;
+    unsigned int oversample;
     float offset_x;
     float offset_y;
     INT pitch;
@@ -596,6 +597,14 @@ struct dwrite_glyphbitmap
     BYTE *buf;
     DWRITE_MATRIX *m;
 };
+
+extern BOOL cleartype_face_is_sampled(IDWriteFontFace *fontface);
+extern DWRITE_RENDERING_MODE1 cleartype_sample_mode(DWRITE_RENDERING_MODE1 rendering_mode);
+extern void cleartype_samples_to_pixels(RECT *bbox);
+extern BYTE *cleartype_alloc_samples(const RECT *bounds);
+extern void cleartype_add_glyph(BYTE *samples, const RECT *bounds, const POINT *origin, const RECT *bbox,
+        const BYTE *src, int pitch, BOOL is_1bpp);
+extern void cleartype_filter(const BYTE *samples, const RECT *bounds, BYTE *bitmap);
 
 enum dwrite_outline_tags
 {

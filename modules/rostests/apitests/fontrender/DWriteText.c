@@ -55,35 +55,35 @@ static const BLEND_PARAMS Params[] =
 static const DWRITE_EXPECT Expected[] =
 {
     { 5760, { 1, -7, 89, 2 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
-    { 5760, { 0, 0, 0, 0 }, { 0, -7, 90, 2 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 5824, { 0, 0, 0, 0 }, { 0, -7, 91, 2 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 5802, { 0, 0, 0, 0 }, { 0, -7, 91, 2 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
-    { 5802, { 0, 0, 0, 0 }, { 0, -7, 91, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 5760, { 0, 0, 0, 0 }, { 0, -7, 90, 2 }, 1.2000f, 0.0000f, 1.0000f },
+    { 5824, { 0, 0, 0, 0 }, { 0, -7, 91, 2 }, 1.2000f, 0.0000f, 1.0000f },
+    { 5802, { 0, 0, 0, 0 }, { 0, -7, 91, 2 }, 2.2000f, 0.5000f, 1.0000f },
+    { 5802, { 0, 0, 0, 0 }, { 0, -7, 91, 3 }, 2.2000f, 0.5000f, 1.0000f },
     { 7040, { 1, -8, 109, 3 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
-    { 7040, { 0, 0, 0, 0 }, { 0, -8, 110, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 7232, { 0, 0, 0, 0 }, { 0, -8, 113, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 7091, { 0, 0, 0, 0 }, { 0, -8, 111, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
-    { 7091, { 0, 0, 0, 0 }, { 0, -9, 111, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 7040, { 0, 0, 0, 0 }, { 0, -8, 110, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 7232, { 0, 0, 0, 0 }, { 0, -8, 113, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 7091, { 0, 0, 0, 0 }, { 0, -8, 111, 3 }, 2.2000f, 0.5000f, 1.0000f },
+    { 7091, { 0, 0, 0, 0 }, { 0, -9, 111, 3 }, 2.2000f, 0.5000f, 1.0000f },
     { 7616, { 1, -9, 119, 3 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
-    { 7616, { 0, 0, 0, 0 }, { 0, -9, 119, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 7872, { 0, 0, 0, 0 }, { 0, -9, 122, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 7736, { 0, 0, 0, 0 }, { 0, -9, 121, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
-    { 7736, { 0, 0, 0, 0 }, { 0, -9, 121, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 7616, { 0, 0, 0, 0 }, { 0, -9, 119, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 7872, { 0, 0, 0, 0 }, { 0, -9, 122, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 7736, { 0, 0, 0, 0 }, { 0, -9, 121, 3 }, 2.2000f, 0.5000f, 1.0000f },
+    { 7736, { 0, 0, 0, 0 }, { 0, -9, 121, 3 }, 2.2000f, 0.5000f, 1.0000f },
     { 9088, { 1, -10, 141, 3 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f, GAP_ALIASED },
-    { 9088, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 9088, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 9025, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 9088, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 9088, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 1.2000f, 0.0000f, 1.0000f },
+    { 9025, { 0, 0, 0, 0 }, { 1, -10, 141, 3 }, 2.2000f, 0.5000f, 1.0000f },
     { 9025, { 0, 0, 0, 0 }, { 1, -11, 141, 4 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
     { 10304, { 1, -12, 159, 4 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
     { 10304, { 0, 0, 0, 0 }, { 1, -12, 160, 4 }, 1.2000f, 0.0000f, 1.0000f },
     { 10304, { 0, 0, 0, 0 }, { 1, -12, 160, 4 }, 1.2000f, 0.0000f, 1.0000f },
-    { 10315, { 0, 0, 0, 0 }, { 1, -12, 161, 4 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
-    { 10315, { 0, 0, 0, 0 }, { 1, -12, 161, 4 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 10315, { 0, 0, 0, 0 }, { 1, -12, 161, 4 }, 2.2000f, 0.5000f, 1.0000f },
+    { 10315, { 0, 0, 0, 0 }, { 1, -12, 161, 4 }, 2.2000f, 0.5000f, 1.0000f },
     { 15552, { 2, -18, 241, 6 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
-    { 15552, { 0, 0, 0, 0 }, { 1, -18, 242, 6 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 15616, { 0, 0, 0, 0 }, { 1, -18, 243, 6 }, 1.2000f, 0.0000f, 1.0000f, GAP_CLEARTYPE },
-    { 15472, { 0, 0, 0, 0 }, { 1, -18, 241, 6 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
-    { 15472, { 0, 0, 0, 0 }, { 1, -18, 241, 6 }, 2.2000f, 0.5000f, 1.0000f, GAP_CLEARTYPE },
+    { 15552, { 0, 0, 0, 0 }, { 1, -18, 242, 6 }, 1.2000f, 0.0000f, 1.0000f },
+    { 15616, { 0, 0, 0, 0 }, { 1, -18, 243, 6 }, 1.2000f, 0.0000f, 1.0000f },
+    { 15472, { 0, 0, 0, 0 }, { 1, -18, 241, 6 }, 2.2000f, 0.5000f, 1.0000f },
+    { 15472, { 0, 0, 0, 0 }, { 1, -18, 241, 6 }, 2.2000f, 0.5000f, 1.0000f },
     { 5696, { 1, -7, 89, 2 }, { 0, 0, 0, 0 }, 2.2000f, 0.5000f, 1.0000f },
     { 5696, { 0, 0, 0, 0 }, { 0, -7, 89, 2 }, 1.2000f, 0.0000f, 1.0000f },
     { 5888, { 0, 0, 0, 0 }, { 0, -7, 92, 2 }, 1.2000f, 0.0000f, 1.0000f, GAP_ADVANCE | GAP_CLEARTYPE },
@@ -116,6 +116,11 @@ static const DWRITE_EXPECT Expected[] =
     { 15211, { 0, 0, 0, 0 }, { 1, -18, 237, 5 }, 2.2000f, 0.5000f, 1.0000f },
 };
 
+static const BYTE ExpectedStems[27] =
+{
+    0, 0, 43, 128, 213, 213, 128, 43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 43, 128, 213, 213, 128, 43, 0, 0, 0,
+};
+
 static const BLEND_PARAMS ExpectedBlend[] =
 {
     { 1.0000f, 0.0000f, 0.0000f },
@@ -131,7 +136,25 @@ FloatEqual(FLOAT A, FLOAT B)
 }
 
 static VOID
-CoverTexture(IDWriteGlyphRunAnalysis *Analysis, DWRITE_TEXTURE_TYPE Type, const RECT *Bounds, const char *Name)
+TestSamples(const BYTE *Texture, INT Width, INT Height, BOOL Stems, const char *Name)
+{
+    INT I, Sixths, Bad = 0;
+
+    for (I = 0; I < Width * Height * 3; I++)
+    {
+        Sixths = (Texture[I] * 6 + 127) / 255;
+        if (Texture[I] != (Sixths * 255 + 3) / 6)
+            Bad++;
+    }
+    ok(Bad == 0, "%s: %d subpixels are not a multiple of 1/6\n", Name, Bad);
+
+    if (Stems && Height > 1 && Width * 3 >= ARRAYSIZE(ExpectedStems))
+        ok(!memcmp(Texture + Width * 3, ExpectedStems, sizeof(ExpectedStems)), "%s: 'H' stems differ\n", Name);
+}
+
+static VOID
+CoverTexture(IDWriteGlyphRunAnalysis *Analysis, DWRITE_TEXTURE_TYPE Type, const RECT *Bounds, const char *Name,
+             BOOL Samples, BOOL Stems)
 {
     INT Channels = Type == DWRITE_TEXTURE_CLEARTYPE_3x1 ? 3 : 1;
     INT Width = Bounds->right - Bounds->left, Height = Bounds->bottom - Bounds->top;
@@ -148,6 +171,8 @@ CoverTexture(IDWriteGlyphRunAnalysis *Analysis, DWRITE_TEXTURE_TYPE Type, const 
     ok(hr == S_OK, "%s: CreateAlphaTexture returned 0x%lx\n", Name, hr);
     if (hr == S_OK)
         FrCoverage(Name, Texture, Width, Height, Width * Channels, Channels, TRUE);
+    if (hr == S_OK && Samples && !FrEmit())
+        TestSamples(Texture, Width, Height, Stems, Name);
     HeapFree(GetProcessHeap(), 0, Texture);
 }
 
@@ -251,9 +276,10 @@ TestRun(IDWriteFactory *Factory, IDWriteFontFace *Face, FR_FONT *Font, INT Size,
     }
 
     strcat(Name, "-1x1");
-    CoverTexture(Analysis, DWRITE_TEXTURE_ALIASED_1x1, &Got.Aliased, Name);
+    CoverTexture(Analysis, DWRITE_TEXTURE_ALIASED_1x1, &Got.Aliased, Name, FALSE, FALSE);
     strcpy(Name + strlen(Name) - 3, "3x1");
-    CoverTexture(Analysis, DWRITE_TEXTURE_CLEARTYPE_3x1, &Got.ClearType, Name);
+    CoverTexture(Analysis, DWRITE_TEXTURE_CLEARTYPE_3x1, &Got.ClearType, Name,
+                 Font == &FrFonts[0] && Mode >= 1 && Mode <= 3, Font == &FrFonts[0] && Mode >= 1 && Mode <= 3 && Size == 12);
 
     if (Mode == 3 && Size == 12 && Font == &FrFonts[0])
     {

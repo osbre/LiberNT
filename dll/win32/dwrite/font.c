@@ -50,6 +50,7 @@ struct cache_key
     unsigned short glyph;
     unsigned short mode;
     unsigned short aliased;
+    unsigned short oversample;
 };
 
 struct cache_entry
@@ -159,7 +160,8 @@ static int fontface_get_glyph_advance(struct dwrite_fontface *fontface, float fo
 void dwrite_fontface_get_glyph_bbox(IDWriteFontFace *iface, struct dwrite_glyphbitmap *bitmap)
 {
     struct cache_key key = { .size = bitmap->emsize, .glyph = bitmap->glyph,
-            .mode = bitmap->gridfit ? DWRITE_MEASURING_MODE_GDI_CLASSIC : DWRITE_MEASURING_MODE_NATURAL };
+            .mode = bitmap->gridfit ? DWRITE_MEASURING_MODE_GDI_CLASSIC : DWRITE_MEASURING_MODE_NATURAL,
+            .oversample = bitmap->oversample };
     struct dwrite_fontface *fontface = unsafe_impl_from_IDWriteFontFace(iface);
     struct get_glyph_bbox_params params;
     struct cache_entry *entry;
@@ -168,6 +170,7 @@ void dwrite_fontface_get_glyph_bbox(IDWriteFontFace *iface, struct dwrite_glyphb
     params.simulations = bitmap->simulations;
     params.glyph = bitmap->glyph;
     params.gridfit = bitmap->gridfit;
+    params.oversample = bitmap->oversample;
     params.emsize = bitmap->emsize;
     params.offset_x = bitmap->offset_x;
     params.offset_y = bitmap->offset_y;
@@ -203,7 +206,7 @@ static HRESULT dwrite_fontface_get_glyph_bitmap(struct dwrite_fontface *fontface
 {
     struct cache_key key = { .size = bitmap->emsize, .glyph = bitmap->glyph,
             .mode = bitmap->gridfit ? DWRITE_MEASURING_MODE_GDI_CLASSIC : DWRITE_MEASURING_MODE_NATURAL,
-            .aliased = rendering_mode == DWRITE_RENDERING_MODE1_ALIASED };
+            .aliased = rendering_mode == DWRITE_RENDERING_MODE1_ALIASED, .oversample = bitmap->oversample };
     struct get_glyph_bitmap_params params;
     const RECT *bbox = &bitmap->bbox;
     unsigned int bitmap_size, _1bpp;
@@ -218,6 +221,7 @@ static HRESULT dwrite_fontface_get_glyph_bitmap(struct dwrite_fontface *fontface
     params.glyph = bitmap->glyph;
     params.mode = rendering_mode;
     params.gridfit = bitmap->gridfit;
+    params.oversample = bitmap->oversample;
     params.emsize = bitmap->emsize;
     params.offset_x = bitmap->offset_x;
     params.offset_y = bitmap->offset_y;
@@ -268,6 +272,7 @@ static int fontface_cache_compare(const void *k, const struct wine_rb_entry *e)
     if (key->glyph != key2->glyph) return (int)key->glyph - (int)key2->glyph;
     if (key->mode != key2->mode) return (int)key->mode - (int)key2->mode;
     if (key->aliased != key2->aliased) return (int)key->aliased - (int)key2->aliased;
+    if (key->oversample != key2->oversample) return (int)key->oversample - (int)key2->oversample;
     return 0;
 }
 
@@ -408,6 +413,7 @@ struct dwrite_glyphrunanalysis
 
     DWRITE_RENDERING_MODE1 rendering_mode;
     unsigned int gridfit;
+    unsigned int oversample;
     DWRITE_TEXTURE_TYPE texture_type; /* derived from rendering mode specified on creation */
     DWRITE_GLYPH_RUN run; /* glyphAdvances and glyphOffsets are not used */
     DWRITE_MATRIX m;
@@ -5914,6 +5920,8 @@ static void glyphrunanalysis_get_glyph_origin(const struct dwrite_glyphrunanalys
             analysis->rendering_mode == DWRITE_RENDERING_MODE1_GDI_CLASSIC ||
             analysis->rendering_mode == DWRITE_RENDERING_MODE1_GDI_NATURAL;
 
+    if (!snap_x && analysis->oversample)
+        x = floorf(x * analysis->oversample + 0.5f) / analysis->oversample;
     origin->x = (LONG)floorf(snap_x ? x + 0.5f : x);
     origin->y = (LONG)floorf(analysis->gridfit ? y + 0.5f : y);
     bitmap->offset_x = snap_x ? 0.0f : x - origin->x;
@@ -5924,16 +5932,20 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
 
 static void glyphrunanalysis_trim_bounds(struct dwrite_glyphrunanalysis *analysis)
 {
+    int channels = analysis->texture_type == DWRITE_TEXTURE_CLEARTYPE_3x1 ? 3 : 1;
     int width = analysis->bounds.right - analysis->bounds.left;
     int height = analysis->bounds.bottom - analysis->bounds.top;
-    int x, y, left = width, top = height, right = 0, bottom = 0;
+    int x, y, c, left = width, top = height, right = 0, bottom = 0;
     BYTE *bitmap;
 
     for (y = 0; y < height; y++)
     {
         for (x = 0; x < width; x++)
         {
-            if (!analysis->bitmap[y * width + x])
+            for (c = 0; c < channels; c++)
+                if (analysis->bitmap[(y * width + x) * channels + c])
+                    break;
+            if (c == channels)
                 continue;
             left = min(left, x);
             top = min(top, y);
@@ -5953,10 +5965,11 @@ static void glyphrunanalysis_trim_bounds(struct dwrite_glyphrunanalysis *analysi
         return;
     }
 
-    if (!(bitmap = malloc((right - left) * (bottom - top))))
+    if (!(bitmap = malloc((right - left) * (bottom - top) * channels)))
         return;
     for (y = top; y < bottom; y++)
-        memcpy(bitmap + (y - top) * (right - left), analysis->bitmap + y * width + left, right - left);
+        memcpy(bitmap + (y - top) * (right - left) * channels, analysis->bitmap + (y * width + left) * channels,
+                (right - left) * channels);
     free(analysis->bitmap);
     analysis->bitmap = bitmap;
     SetRect(&analysis->bounds, analysis->bounds.left + left, analysis->bounds.top + top,
@@ -5980,6 +5993,7 @@ static void glyphrunanalysis_get_texturebounds(struct dwrite_glyphrunanalysis *a
     glyph_bitmap.simulations = IDWriteFontFace_GetSimulations(analysis->run.fontFace);
     glyph_bitmap.emsize = analysis->run.fontEmSize;
     glyph_bitmap.gridfit = analysis->gridfit;
+    glyph_bitmap.oversample = analysis->oversample;
     if (analysis->flags & RUNANALYSIS_USE_TRANSFORM)
         glyph_bitmap.m = &analysis->m;
 
@@ -5992,17 +6006,19 @@ static void glyphrunanalysis_get_texturebounds(struct dwrite_glyphrunanalysis *a
         glyphrunanalysis_get_glyph_origin(analysis, i, &glyph_bitmap, &origin);
         dwrite_fontface_get_glyph_bbox(analysis->run.fontFace, &glyph_bitmap);
 
-        bitmap_size = get_glyph_bitmap_pitch(analysis->rendering_mode, bbox->right - bbox->left) *
-            (bbox->bottom - bbox->top);
+        bitmap_size = get_glyph_bitmap_pitch(analysis->oversample ? cleartype_sample_mode(analysis->rendering_mode) :
+                analysis->rendering_mode, bbox->right - bbox->left) * (bbox->bottom - bbox->top);
         if (bitmap_size > analysis->max_glyph_bitmap_size)
             analysis->max_glyph_bitmap_size = bitmap_size;
+        if (analysis->oversample)
+            cleartype_samples_to_pixels(bbox);
 
         OffsetRect(bbox, origin.x, origin.y);
         UnionRect(&analysis->bounds, &analysis->bounds, bbox);
     }
 
     analysis->flags |= RUNANALYSIS_BOUNDS_READY;
-    if (analysis->texture_type == DWRITE_TEXTURE_ALIASED_1x1 && !IsRectEmpty(&analysis->bounds) &&
+    if ((analysis->texture_type == DWRITE_TEXTURE_ALIASED_1x1 || analysis->oversample) && !IsRectEmpty(&analysis->bounds) &&
             SUCCEEDED(glyphrunanalysis_render(analysis)))
         glyphrunanalysis_trim_bounds(analysis);
     *bounds = analysis->bounds;
@@ -6045,7 +6061,10 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
     static const BYTE masks[8] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01};
     struct dwrite_fontface *fontface = unsafe_impl_from_IDWriteFontFace(analysis->run.fontFace);
     struct dwrite_glyphbitmap glyph_bitmap;
+    DWRITE_RENDERING_MODE1 mode = analysis->oversample ? cleartype_sample_mode(analysis->rendering_mode) :
+            analysis->rendering_mode;
     D2D_POINT_2F origin;
+    BYTE *samples = NULL;
     UINT32 i, size;
     RECT *bbox;
 
@@ -6065,10 +6084,13 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
     glyph_bitmap.simulations = fontface->simulations;
     glyph_bitmap.emsize = analysis->run.fontEmSize;
     glyph_bitmap.gridfit = analysis->gridfit;
+    glyph_bitmap.oversample = analysis->oversample;
     if (analysis->flags & RUNANALYSIS_USE_TRANSFORM)
         glyph_bitmap.m = &analysis->m;
-    if (!(glyph_bitmap.buf = malloc(analysis->max_glyph_bitmap_size)))
+    if (!(glyph_bitmap.buf = malloc(analysis->max_glyph_bitmap_size)) ||
+            (analysis->oversample && !(samples = cleartype_alloc_samples(&analysis->bounds))))
     {
+        free(glyph_bitmap.buf);
         free(analysis->bitmap);
         analysis->bitmap = NULL;
         return E_OUTOFMEMORY;
@@ -6093,12 +6115,18 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
         width = bbox->right - bbox->left;
         height = bbox->bottom - bbox->top;
 
-        glyph_bitmap.pitch = get_glyph_bitmap_pitch(analysis->rendering_mode, width);
+        glyph_bitmap.pitch = get_glyph_bitmap_pitch(mode, width);
         memset(src, 0, height * glyph_bitmap.pitch);
 
-        if (FAILED(dwrite_fontface_get_glyph_bitmap(fontface, analysis->rendering_mode, &is_1bpp, &glyph_bitmap)))
+        if (FAILED(dwrite_fontface_get_glyph_bitmap(fontface, mode, &is_1bpp, &glyph_bitmap)))
         {
             WARN("Failed to render glyph[%u] = %#x.\n", i, glyph_bitmap.glyph);
+            continue;
+        }
+
+        if (samples)
+        {
+            cleartype_add_glyph(samples, &analysis->bounds, &origin, bbox, src, glyph_bitmap.pitch, is_1bpp);
             continue;
         }
 
@@ -6148,6 +6176,11 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
         }
     }
     free(glyph_bitmap.buf);
+    if (samples)
+    {
+        cleartype_filter(samples, &analysis->bounds, analysis->bitmap);
+        free(samples);
+    }
 
     analysis->flags |= RUNANALYSIS_BITMAP_READY;
 
@@ -6372,6 +6405,9 @@ HRESULT create_glyphrunanalysis(const struct glyphrunanalysis_desc *desc, IDWrit
         analysis->m = *desc->transform;
         analysis->flags |= RUNANALYSIS_USE_TRANSFORM;
     }
+    /* TODO: sample transformed ClearType runs */
+    analysis->oversample = analysis->texture_type == DWRITE_TEXTURE_CLEARTYPE_3x1 &&
+            !(analysis->flags & RUNANALYSIS_USE_TRANSFORM) && cleartype_face_is_sampled(desc->run->fontFace) ? 6 : 0;
 
     analysis->run.glyphIndices = analysis->glyphs;
     memcpy(analysis->glyphs, desc->run->glyphIndices, desc->run->glyphCount*sizeof(*desc->run->glyphIndices));

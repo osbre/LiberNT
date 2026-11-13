@@ -69,6 +69,7 @@ struct get_glyph_bbox_params
     unsigned int simulations;
     unsigned int glyph;
     unsigned int gridfit;
+    unsigned int oversample;
     float emsize;
     float offset_x;
     float offset_y;
@@ -83,6 +84,7 @@ struct get_glyph_bitmap_params
     unsigned int glyph;
     unsigned int mode;
     unsigned int gridfit;
+    unsigned int oversample;
     float emsize;
     float offset_x;
     float offset_y;

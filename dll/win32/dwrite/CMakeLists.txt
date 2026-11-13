@@ -8,6 +8,7 @@ list(APPEND SOURCE
     analyzer.c
     bidi.c
     bracket.c
+    cleartype.c
     direction.c
     font.c
     format.c
