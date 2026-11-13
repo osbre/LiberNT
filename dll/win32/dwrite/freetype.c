@@ -107,6 +107,7 @@ typedef struct
 #define pFT_Init_FreeType FT_Init_FreeType
 #define pFT_Library_Version FT_Library_Version
 #define pFT_Load_Glyph FT_Load_Glyph
+#define pFT_Load_Sfnt_Table FT_Load_Sfnt_Table
 #define pFT_Matrix_Multiply FT_Matrix_Multiply
 #define pFT_MulDiv FT_MulDiv
 #define pFT_New_Memory_Face FT_New_Memory_Face
@@ -140,6 +141,7 @@ MAKE_FUNCPTR(FT_Glyph_Transform);
 MAKE_FUNCPTR(FT_Init_FreeType);
 MAKE_FUNCPTR(FT_Library_Version);
 MAKE_FUNCPTR(FT_Load_Glyph);
+MAKE_FUNCPTR(FT_Load_Sfnt_Table);
 MAKE_FUNCPTR(FT_Matrix_Multiply);
 MAKE_FUNCPTR(FT_MulDiv);
 MAKE_FUNCPTR(FT_New_Memory_Face);
@@ -218,6 +220,7 @@ static NTSTATUS process_attach(void *args)
     LOAD_FUNCPTR(FT_Init_FreeType)
     LOAD_FUNCPTR(FT_Library_Version)
     LOAD_FUNCPTR(FT_Load_Glyph)
+    LOAD_FUNCPTR(FT_Load_Sfnt_Table)
     LOAD_FUNCPTR(FT_Matrix_Multiply)
     LOAD_FUNCPTR(FT_MulDiv)
     LOAD_FUNCPTR(FT_New_Memory_Face)
@@ -635,6 +638,20 @@ static BOOL get_glyph_transform(unsigned int simulations, const MATRIX_2X2 *m, F
     return TRUE;
 }
 
+static BOOL freetype_face_has_sfnt_table(FT_Face face, FT_ULong tag)
+{
+    FT_ULong length = 0;
+
+    return !pFT_Load_Sfnt_Table(face, tag, 0, NULL, &length);
+}
+
+static BOOL freetype_face_is_unhinted_glyf(FT_Face face)
+{
+    return freetype_face_has_sfnt_table(face, FT_MAKE_TAG('g','l','y','f')) &&
+            !freetype_face_has_sfnt_table(face, FT_MAKE_TAG('f','p','g','m')) &&
+            !freetype_face_has_sfnt_table(face, FT_MAKE_TAG('p','r','e','p'));
+}
+
 static FT_Int32 get_glyph_load_flags(unsigned int gridfit, BOOL needs_transform)
 {
     FT_Int32 flags = FT_LOAD_NO_AUTOHINT;
@@ -858,9 +875,15 @@ static NTSTATUS get_glyph_advance(void *args)
     if (!pFT_Load_Glyph(face, params->glyph, params->mode == DWRITE_MEASURING_MODE_NATURAL ? FT_LOAD_NO_HINTING : FT_LOAD_NO_AUTOHINT))
     {
         *params->advance = face->glyph->advance.x >> 6;
-        if (params->mode == DWRITE_MEASURING_MODE_GDI_CLASSIC && FT_IS_SCALABLE(face) && face->units_per_EM &&
+        if (params->mode != DWRITE_MEASURING_MODE_NATURAL && FT_IS_SCALABLE(face) && face->units_per_EM &&
                 !pFT_Get_Advance(face, params->glyph, FT_LOAD_NO_SCALE | FT_ADVANCE_FLAG_FAST_ONLY, &units))
-            *params->advance = pFT_MulDiv(units, size->metrics.x_ppem, face->units_per_EM);
+        {
+            if (params->mode == DWRITE_MEASURING_MODE_GDI_CLASSIC)
+                *params->advance = pFT_MulDiv(units, size->metrics.x_ppem, face->units_per_EM);
+            else if (freetype_face_is_unhinted_glyf(face))
+                /* Windows 11 rounds GDI natural advances of unhinted fonts up from 30/64 px. */
+                *params->advance = (pFT_MulDiv(units, size->metrics.x_ppem << 6, face->units_per_EM) + 34) >> 6;
+        }
         *params->has_contours = freetype_glyph_has_contours(face);
     }
 
